@@ -2,25 +2,27 @@ import streamlit as st
 from pytube import YouTube
 import openai
 import os
-from pydub import AudioSegment
+from moviepy.editor import AudioFileClip
 
-# 🔑 Sua chave vai em .streamlit/secrets.toml no Streamlit Cloud
+# 🔑 chave da API (configure em .streamlit/secrets.toml)
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 st.title("Transcrever Vídeo do YouTube 🎥➡️📝")
 
-# Função para dividir o áudio em blocos menores
-def split_audio(file_path, chunk_length_ms=60_000):
-    audio = AudioSegment.from_file(file_path)
+# Função para dividir áudio em partes menores
+def split_audio(file_path, chunk_length_sec=60):
+    audio = AudioFileClip(file_path)
+    duration = int(audio.duration)
     chunks = []
-    for i in range(0, len(audio), chunk_length_ms):
-        chunk = audio[i:i+chunk_length_ms]
-        chunk_name = f"chunk_{i//chunk_length_ms}.mp3"
-        chunk.export(chunk_name, format="mp3")
+    for i in range(0, duration, chunk_length_sec):
+        chunk_name = f"chunk_{i//chunk_length_sec}.mp3"
+        subclip = audio.subclip(i, min(i + chunk_length_sec, duration))
+        subclip.write_audiofile(chunk_name, codec="mp3", verbose=False, logger=None)
         chunks.append(chunk_name)
+    audio.close()
     return chunks
 
-# Entrada do link do YouTube
+# Entrada do link
 link = st.text_input("Cole o link do YouTube aqui:")
 
 if link:
@@ -32,7 +34,7 @@ if link:
             out_file = stream.download(filename="audio.mp4")
 
             st.info("✂️ Dividindo áudio em partes menores...")
-            chunks = split_audio(out_file, chunk_length_ms=60_000)  # 1 min cada parte
+            chunks = split_audio(out_file, chunk_length_sec=60)  # 1 min cada parte
 
             st.info("📝 Enviando para transcrição...")
             full_transcript = ""
