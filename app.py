@@ -2,27 +2,41 @@ import streamlit as st
 from pytube import YouTube
 import openai
 import os
-from moviepy.editor import AudioFileClip
+import subprocess
 
-# 🔑 chave da API (configure em .streamlit/secrets.toml)
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 st.title("Transcrever Vídeo do YouTube 🎥➡️📝")
 
-# Função para dividir áudio em partes menores
-def split_audio(file_path, chunk_length_sec=60):
-    audio = AudioFileClip(file_path)
-    duration = int(audio.duration)
+# Função que divide o áudio em partes usando ffmpeg diretamente
+def split_audio_ffmpeg(file_path, chunk_length_sec=60):
+    # Primeiro pega a duração total do áudio com ffprobe
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", file_path],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT
+    )
+    duration = float(result.stdout)
     chunks = []
-    for i in range(0, duration, chunk_length_sec):
-        chunk_name = f"chunk_{i//chunk_length_sec}.mp3"
-        subclip = audio.subclip(i, min(i + chunk_length_sec, duration))
-        subclip.write_audiofile(chunk_name, codec="mp3", verbose=False, logger=None)
-        chunks.append(chunk_name)
-    audio.close()
+    i = 0
+    start = 0
+
+    while start < duration:
+        output_file = f"chunk_{i}.mp3"
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-i", file_path,
+            "-ss", str(start),
+            "-t", str(chunk_length_sec),
+            "-acodec", "mp3",
+            output_file
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        chunks.append(output_file)
+        i += 1
+        start += chunk_length_sec
     return chunks
 
-# Entrada do link
 link = st.text_input("Cole o link do YouTube aqui:")
 
 if link:
@@ -34,7 +48,7 @@ if link:
             out_file = stream.download(filename="audio.mp4")
 
             st.info("✂️ Dividindo áudio em partes menores...")
-            chunks = split_audio(out_file, chunk_length_sec=60)  # 1 min cada parte
+            chunks = split_audio_ffmpeg(out_file, chunk_length_sec=60)
 
             st.info("📝 Enviando para transcrição...")
             full_transcript = ""
