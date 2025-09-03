@@ -1,4 +1,4 @@
 streamlit
 pytube
 openai
-pydub
+moviepy
