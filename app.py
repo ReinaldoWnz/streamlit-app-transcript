@@ -1,73 +1,68 @@
 import streamlit as st
-from pytube import YouTube
+from youtube_transcript_api import YouTubeTranscriptApi
 import openai
-import os
-import subprocess
+import re
 
+# Defina a chave da API da OpenAI como uma variável de ambiente no Streamlit Cloud
+# ou peça ao usuário para inseri-la.
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-st.title("Transcrever Vídeo do YouTube 🎥➡️📝")
+def get_video_id(url):
+    """Extrai o ID do vídeo do YouTube de um URL."""
+    match = re.search(r'(?:v=|\/embed\/|\/watch\?v=|\/youtu\.be\/|\/shorts\/)([a-zA-Z0-9_-]{11})', url)
+    return match.group(1) if match else None
 
-# Função que divide o áudio em partes usando ffmpeg diretamente
-def split_audio_ffmpeg(file_path, chunk_length_sec=60):
-    # Primeiro pega a duração total do áudio com ffprobe
-    result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", file_path],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT
-    )
-    duration = float(result.stdout)
-    chunks = []
-    i = 0
-    start = 0
+def get_transcript(video_id):
+    """Obtém a transcrição do YouTube."""
+    try:
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['pt', 'en'])
+        transcript_text = ' '.join([item['text'] for item in transcript_list])
+        return transcript_text
+    except Exception as e:
+        st.error(f"Erro ao obter a transcrição do vídeo. Certifique-se de que as legendas estão disponíveis. Detalhes do erro: {e}")
+        return None
 
-    while start < duration:
-        output_file = f"chunk_{i}.mp3"
-        subprocess.run([
-            "ffmpeg", "-y",
-            "-i", file_path,
-            "-ss", str(start),
-            "-t", str(chunk_length_sec),
-            "-acodec", "mp3",
-            output_file
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        chunks.append(output_file)
-        i += 1
-        start += chunk_length_sec
-    return chunks
+def summarize_with_openai(text, model="gpt-3.5-turbo"):
+    """Resumir o texto usando a API da OpenAI."""
+    prompt = f"Resuma o seguinte texto de forma concisa e clara em português:\n\n{text}"
+    try:
+        response = openai.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "Você é um assistente útil para resumir textos."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=300
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        st.error(f"Erro ao se comunicar com a API da OpenAI. Detalhes do erro: {e}")
+        return None
 
-link = st.text_input("Cole o link do YouTube aqui:")
+st.set_page_config(page_title="YouTube Transcriber e Resumidor")
+st.title("📹 Transcrever e Resumir Vídeos do YouTube")
 
-if link:
-    if st.button("Transcrever"):
-        try:
-            st.info("🎵 Baixando áudio do vídeo...")
-            yt = YouTube(link)
-            stream = yt.streams.filter(only_audio=True, mime_type="audio/mp4").first()
-            out_file = stream.download(filename="audio.mp4")
+youtube_url = st.text_input("Insira o link do vídeo do YouTube:")
 
-            st.info("✂️ Dividindo áudio em partes menores...")
-            chunks = split_audio_ffmpeg(out_file, chunk_length_sec=60)
-
-            st.info("📝 Enviando para transcrição...")
-            full_transcript = ""
-
-            for idx, chunk in enumerate(chunks, start=1):
-                st.write(f"Transcrevendo parte {idx}/{len(chunks)}...")
-                with open(chunk, "rb") as f:
-                    part = openai.audio.transcriptions.create(
-                        model="gpt-4o-mini-transcribe",
-                        file=f,
-                        response_format="text"
-                    )
-                    full_transcript += part + "\n"
-                os.remove(chunk)
-
-            st.success("✅ Transcrição concluída!")
-            st.text_area("Texto transcrito:", full_transcript, height=400)
-
-            os.remove(out_file)
-
-        except Exception as e:
-            st.error(f"Erro: {e}")
+if youtube_url:
+    video_id = get_video_id(youtube_url)
+    if not video_id:
+        st.error("URL do YouTube inválido. Por favor, insira um URL válido.")
+    else:
+        with st.spinner("Obtendo transcrição..."):
+            transcript_text = get_transcript(video_id)
+        
+        if transcript_text:
+            st.success("Transcrição obtida com sucesso!")
+            
+            st.subheader("Transcrição Completa")
+            with st.expander("Clique para ver a transcrição"):
+                st.write(transcript_text)
+            
+            if st.button("Gerar Resumo"):
+                with st.spinner("Gerando resumo com a IA..."):
+                    summary_text = summarize_with_openai(transcript_text)
+                
+                if summary_text:
+                    st.subheader("Resumo do Vídeo")
+                    st.write(summary_text)
