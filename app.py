@@ -3,9 +3,9 @@ from youtube_transcript_api import YouTubeTranscriptApi
 import openai
 import re
 
-# Defina a chave da API da OpenAI como uma variável de ambiente no Streamlit Cloud
-# ou peça ao usuário para inseri-la.
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Esta linha deve ser definida de acordo com sua chave, seja por
+# st.secrets ou por uma variável de ambiente.
+# openai.api_key = "SUA_CHAVE_AQUI" 
 
 def get_video_id(url):
     """Extrai o ID do vídeo do YouTube de um URL."""
@@ -15,6 +15,7 @@ def get_video_id(url):
 def get_transcript(video_id):
     """Obtém a transcrição do YouTube."""
     try:
+        # A chamada correta para a função
         transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['pt', 'en'])
         transcript_text = ' '.join([item['text'] for item in transcript_list])
         return transcript_text
@@ -22,26 +23,8 @@ def get_transcript(video_id):
         st.error(f"Erro ao obter a transcrição do vídeo. Certifique-se de que as legendas estão disponíveis. Detalhes do erro: {e}")
         return None
 
-def summarize_with_openai(text, model="gpt-3.5-turbo"):
-    """Resumir o texto usando a API da OpenAI."""
-    prompt = f"Resuma o seguinte texto de forma concisa e clara em português:\n\n{text}"
-    try:
-        response = openai.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "Você é um assistente útil para resumir textos."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=300
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        st.error(f"Erro ao se comunicar com a API da OpenAI. Detalhes do erro: {e}")
-        return None
-
-st.set_page_config(page_title="YouTube Transcriber e Resumidor")
+# O restante do seu aplicativo Streamlit
 st.title("📹 Transcrever e Resumir Vídeos do YouTube")
-
 youtube_url = st.text_input("Insira o link do vídeo do YouTube:")
 
 if youtube_url:
@@ -58,11 +41,3 @@ if youtube_url:
             st.subheader("Transcrição Completa")
             with st.expander("Clique para ver a transcrição"):
                 st.write(transcript_text)
-            
-            if st.button("Gerar Resumo"):
-                with st.spinner("Gerando resumo com a IA..."):
-                    summary_text = summarize_with_openai(transcript_text)
-                
-                if summary_text:
-                    st.subheader("Resumo do Vídeo")
-                    st.write(summary_text)
