@@ -8,15 +8,12 @@ st.set_page_config(page_title="YouTube Transcriber e Resumidor", layout="wide")
 st.title("📹 Transcrever, Resumir e Analisar Vídeos do YouTube")
 st.markdown("---")
 
-# Seção de Entrada da Chave da API
-st.header("🔑 Configuração")
-openai_api_key = st.text_input("Insira sua chave da API da OpenAI:", type="password")
-
-if not openai_api_key:
-    st.warning("Por favor, insira sua chave da API da OpenAI para continuar.")
-    st.stop()
+# Carrega a chave da API do arquivo secrets.toml
+if "OPENAI_API_KEY" in st.secrets:
+    openai.api_key = st.secrets.OPENAI_API_KEY
 else:
-    openai.api_key = openai_api_key
+    st.error("Chave da API da OpenAI não encontrada. Por favor, configure-a no secrets.toml.")
+    st.stop()
 
 # Seção de Entrada do Vídeo
 st.header("🔗 Insira o Link do Vídeo")
@@ -42,7 +39,7 @@ def summarize_and_tag(transcript_text):
         summary_response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "system", "content": "Você é um assistente útil."},
                 {"role": "user", "content": f"Escreva um resumo conciso e claro de 100 palavras sobre este vídeo em português: {transcript_text}"}
             ],
             max_tokens=200
@@ -52,7 +49,7 @@ def summarize_and_tag(transcript_text):
         tags_response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "system", "content": "Você é um assistente útil."},
                 {"role": "user", "content": f"Gere uma lista de 5 a 10 tags relevantes para este vídeo em formato de lista Python, como ['tag1', 'tag2']: {transcript_text}"}
             ],
             max_tokens=100
@@ -69,7 +66,7 @@ def get_timecodes(transcript_json):
         timecode_response = openai.chat.completions.create(
             model="gpt-3.5-turbo-16k",
             messages=[
-                {"role": "system", "content": "You are a database computer. The data is stored in JSON {text:'', start:'', duration:''}. Based on the following JSON, what are the main topics discussed? For each topic, provide the start time code in seconds and also in HH:MM:SS format. Provide the response as a clear, formatted list."},
+                {"role": "system", "content": "Você é um computador de banco de dados. Os dados são armazenados em JSON {text:'', start:'', duration:''}. Com base no JSON a seguir, quais são os principais tópicos discutidos? Para cada tópico, forneça o código de tempo inicial em segundos e também no formato HH:MM:SS. Forneça a resposta como uma lista clara e formatada."},
                 {"role": "user", "content": str(transcript_json)}
             ]
         )
